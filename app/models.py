@@ -35,3 +35,36 @@ class AircraftListResponse(BaseModel):
 
 class AirportSearchResponse(BaseModel):
     airports: list[dict[str, float | str]]
+
+
+class FuelComparisonDelta(BaseModel):
+    taxi_kg: float
+    taxi_tons: float
+    trip_kg: float
+    trip_tons: float
+    contingency_kg: float
+    contingency_tons: float
+    reserve_kg: float
+    reserve_tons: float
+    total_kg: float
+    total_tons: float
+    total_pct: float = Field(..., description="Percentage difference in total fuel: (b - a) / a * 100")
+
+
+class FuelComparisonItem(BaseModel):
+    aircraft_type: str
+    aircraft_name: str
+    distance_nm: float
+    block_time_min: float
+    fuel: FuelBreakdown
+
+
+class FuelComparisonResponse(BaseModel):
+    origin: str
+    destination: str
+    assumptions: dict[str, float]
+    aircraft_a: FuelComparisonItem
+    aircraft_b: FuelComparisonItem
+    delta: FuelComparisonDelta = Field(
+        ..., description="Fuel difference (b minus a). Negative values mean aircraft_b uses less fuel."
+    )
