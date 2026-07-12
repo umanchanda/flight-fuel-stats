@@ -110,3 +110,61 @@ def test_fuel_by_route_returns_404_when_no_route_exists() -> None:
 
     response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
     assert response.status_code == 404
+
+
+def test_compare_fuel_success() -> None:
+    response = client.get("/v1/fuel/compare?origin=SFO&destination=LAX&aircraft_a=A320&aircraft_b=B737")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["origin"] == "SFO"
+    assert data["destination"] == "LAX"
+    assert data["aircraft_a"]["aircraft_type"] == "A320"
+    assert data["aircraft_b"]["aircraft_type"] == "B737"
+
+    assert data["aircraft_a"]["fuel"]["total_kg"] > 0
+    assert data["aircraft_b"]["fuel"]["total_kg"] > 0
+
+    delta = data["delta"]
+
+    # delta = b - a; verify arithmetic for each component
+    expected_total_kg = round(data["aircraft_b"]["fuel"]["total_kg"] - data["aircraft_a"]["fuel"]["total_kg"], 1)
+    assert delta["total_kg"] == expected_total_kg
+
+    expected_trip_kg = round(data["aircraft_b"]["fuel"]["trip_kg"] - data["aircraft_a"]["fuel"]["trip_kg"], 1)
+    assert delta["trip_kg"] == expected_trip_kg
+
+    expected_reserve_kg = round(data["aircraft_b"]["fuel"]["reserve_kg"] - data["aircraft_a"]["fuel"]["reserve_kg"], 1)
+    assert delta["reserve_kg"] == expected_reserve_kg
+
+    # total_pct should reflect the same sign as total_kg
+    if delta["total_kg"] > 0:
+        assert delta["total_pct"] > 0
+    elif delta["total_kg"] < 0:
+        assert delta["total_pct"] < 0
+    else:
+        assert delta["total_pct"] == 0.0
+
+
+def test_compare_fuel_same_origin_destination() -> None:
+    response = client.get("/v1/fuel/compare?origin=SFO&destination=SFO&aircraft_a=A320&aircraft_b=B737")
+    assert response.status_code == 400
+
+
+def test_compare_fuel_unknown_origin() -> None:
+    response = client.get("/v1/fuel/compare?origin=ZZZ&destination=LAX&aircraft_a=A320&aircraft_b=B737")
+    assert response.status_code == 404
+
+
+def test_compare_fuel_unknown_destination() -> None:
+    response = client.get("/v1/fuel/compare?origin=SFO&destination=ZZZ&aircraft_a=A320&aircraft_b=B737")
+    assert response.status_code == 404
+
+
+def test_compare_fuel_unknown_aircraft_a() -> None:
+    response = client.get("/v1/fuel/compare?origin=SFO&destination=LAX&aircraft_a=XXXX&aircraft_b=B737")
+    assert response.status_code == 404
+
+
+def test_compare_fuel_unknown_aircraft_b() -> None:
+    response = client.get("/v1/fuel/compare?origin=SFO&destination=LAX&aircraft_a=A320&aircraft_b=XXXX")
+    assert response.status_code == 404
