@@ -49,3 +49,12 @@ def test_fuel_by_route_success() -> None:
 def test_fuel_by_route_same_origin_destination() -> None:
     response = client.get("/v1/fuel/by-route?origin=SFO&destination=SFO")
     assert response.status_code == 400
+
+
+def test_fuel_by_route_ewr_to_del() -> None:
+    response = client.get("/v1/fuel/by-route?origin=EWR&destination=DEL")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["origin"] == "EWR"
+    assert data["destination"] == "DEL"
+    assert len(data["estimates"]) >= 1

@@ -1,4 +1,6 @@
 AIRPORTS: dict[str, dict[str, float | str]] = {
+    "EWR": {"name": "Newark Liberty International", "lat": 40.6925, "lon": -74.168611},
+    "DEL": {"name": "Indira Gandhi International", "lat": 28.5665, "lon": 77.103104},
     "SFO": {"name": "San Francisco International", "lat": 37.6188056, "lon": -122.3754167},
     "LAX": {"name": "Los Angeles International", "lat": 33.9425361, "lon": -118.4080744},
     "JFK": {"name": "John F. Kennedy International", "lat": 40.6397511, "lon": -73.7789256},
