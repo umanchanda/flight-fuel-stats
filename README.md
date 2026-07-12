@@ -23,7 +23,15 @@ Request:
 curl "http://127.0.0.1:8000/v1/fuel/by-route?origin=SFO&destination=LAX"
 ```
 
-This returns all supported aircraft and the fuel estimate for each one, sorted by total fuel (lowest first).
+This returns only the aircraft that are valid for the requested route (fetched from the route-analyzer service), sorted by total fuel (lowest first).
+
+The route lookup endpoint used is:
+
+```text
+https://route-analyzer-nfu1.onrender.com/aircraft/<ORIGIN>/<DEST>
+```
+
+Set `ROUTE_ANALYZER_BASE_URL` to override this base URL in non-production environments.
 
 Use optional query params for tuning:
 - `routing_factor` (default `1.06`)

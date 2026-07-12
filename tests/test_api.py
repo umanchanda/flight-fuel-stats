@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import main as main_module
 from app.main import app
 
 client = TestClient(app)
@@ -58,12 +59,21 @@ def test_airport_search_includes_new_airports() -> None:
 
 
 def test_fuel_by_route_success() -> None:
+    def mock_route_lookup(origin: str, destination: str) -> tuple[bool, list[str], str | None]:
+        assert origin == "SFO"
+        assert destination == "LAX"
+        return True, ["A320", "B737"], None
+
+    main_module.get_supported_aircraft_for_route = mock_route_lookup
+
     response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
     assert response.status_code == 200
     data = response.json()
     assert data["origin"] == "SFO"
     assert data["destination"] == "LAX"
-    assert len(data["estimates"]) >= 1
+    assert len(data["estimates"]) == 2
+    types = {item["aircraft_type"] for item in data["estimates"]}
+    assert types == {"A320", "B737"}
     breakdown = data["estimates"][0]["fuel_tons"]
     assert breakdown["total_kg"] > 0
     assert breakdown["total_tons"] > 0
@@ -76,9 +86,27 @@ def test_fuel_by_route_same_origin_destination() -> None:
 
 
 def test_fuel_by_route_ewr_to_del() -> None:
+    def mock_route_lookup(origin: str, destination: str) -> tuple[bool, list[str], str | None]:
+        assert origin == "EWR"
+        assert destination == "DEL"
+        return True, ["B77W", "B772LR", "B787"], "mocked route notes"
+
+    main_module.get_supported_aircraft_for_route = mock_route_lookup
+
     response = client.get("/v1/fuel/by-route?origin=EWR&destination=DEL")
     assert response.status_code == 200
     data = response.json()
     assert data["origin"] == "EWR"
     assert data["destination"] == "DEL"
-    assert len(data["estimates"]) >= 1
+    types = {item["aircraft_type"] for item in data["estimates"]}
+    assert types == {"B77W", "B772LR", "B787"}
+
+
+def test_fuel_by_route_returns_404_when_no_route_exists() -> None:
+    def mock_route_lookup(_origin: str, _destination: str) -> tuple[bool, list[str], str | None]:
+        return False, [], None
+
+    main_module.get_supported_aircraft_for_route = mock_route_lookup
+
+    response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
+    assert response.status_code == 404

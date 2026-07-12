@@ -10,6 +10,7 @@ from app.models import (
     RouteFuelEstimatesResponse,
 )
 from app.services.fuel import estimate_fuel
+from app.services.route_aircraft import RouteAircraftLookupError, get_supported_aircraft_for_route
 
 DEFAULT_PAYLOAD_KG = 12000.0
 
@@ -96,8 +97,22 @@ def fuel_by_route(
     destination_airport = AIRPORTS[destination_code]
     effective_payload_kg = payload_kg if payload_kg is not None else DEFAULT_PAYLOAD_KG
 
+    try:
+        route_exists, route_aircraft_codes, _route_notes = get_supported_aircraft_for_route(origin_code, destination_code)
+    except RouteAircraftLookupError as exc:
+        raise HTTPException(status_code=502, detail="Unable to retrieve route aircraft data") from exc
+
+    if not route_exists:
+        raise HTTPException(status_code=404, detail=f"No known route found for {origin_code} to {destination_code}")
+    if not route_aircraft_codes:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No supported aircraft found for route {origin_code} to {destination_code}",
+        )
+
     estimates: list[RouteFuelEstimateItem] = []
-    for aircraft_code, aircraft in AIRCRAFT_PROFILES.items():
+    for aircraft_code in route_aircraft_codes:
+        aircraft = AIRCRAFT_PROFILES[aircraft_code]
         result = estimate_fuel(
             origin=origin_airport,
             destination=destination_airport,
