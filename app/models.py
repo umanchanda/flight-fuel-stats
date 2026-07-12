@@ -2,10 +2,15 @@ from pydantic import BaseModel, Field
 
 
 class FuelBreakdown(BaseModel):
+    taxi_kg: float
     taxi_tons: float
+    trip_kg: float
     trip_tons: float
+    contingency_kg: float
     contingency_tons: float
+    reserve_kg: float
     reserve_tons: float
+    total_kg: float
     total_tons: float
 
 

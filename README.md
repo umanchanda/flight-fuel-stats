@@ -6,6 +6,8 @@ FastAPI service to estimate route fuel usage using:
 - route distance with a routing factor
 - optional payload and contingency settings
 
+The aircraft catalog now includes common long-haul types such as the 777-300ER, A380, 747-8, 787 variants, A350 variants, and A330-300.
+
 ## Endpoints
 
 - GET /health
@@ -28,7 +30,7 @@ Use optional query params for tuning:
 - `contingency_pct` (default `0.05`)
 - `payload_kg` (default `12000` if omitted)
 
-Response includes distance, block time, fuel breakdown (tons), and assumptions.
+Response includes distance, block time, fuel breakdown in both kg and tons, and assumptions.
 
 ## Run locally
 

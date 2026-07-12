@@ -40,6 +40,21 @@ def list_aircraft() -> AircraftListResponse:
     return AircraftListResponse(aircraft=aircraft)
 
 
+def _fuel_breakdown(result: dict[str, float]) -> FuelBreakdown:
+    return FuelBreakdown(
+        taxi_kg=result["taxi_kg"],
+        taxi_tons=round(result["taxi_kg"] / 1000.0, 3),
+        trip_kg=result["trip_kg"],
+        trip_tons=round(result["trip_kg"] / 1000.0, 3),
+        contingency_kg=result["contingency_kg"],
+        contingency_tons=round(result["contingency_kg"] / 1000.0, 3),
+        reserve_kg=result["reserve_kg"],
+        reserve_tons=round(result["reserve_kg"] / 1000.0, 3),
+        total_kg=result["total_kg"],
+        total_tons=round(result["total_kg"] / 1000.0, 3),
+    )
+
+
 @app.get("/v1/airports/search", response_model=AirportSearchResponse)
 def search_airports(q: str = Query(..., min_length=2, description="Airport code or name query")) -> AirportSearchResponse:
     query = q.strip().upper()
@@ -97,17 +112,11 @@ def fuel_by_route(
                 aircraft_name=str(aircraft["name"]),
                 distance_nm=result["distance_nm"],
                 block_time_min=result["block_time_min"],
-                fuel_tons=FuelBreakdown(
-                    taxi_tons=result["taxi_tons"],
-                    trip_tons=result["trip_tons"],
-                    contingency_tons=result["contingency_tons"],
-                    reserve_tons=result["reserve_tons"],
-                    total_tons=result["total_tons"],
-                ),
+                fuel_tons=_fuel_breakdown(result),
             )
         )
 
-    estimates.sort(key=lambda item: item.fuel_tons.total_tons)
+    estimates.sort(key=lambda item: item.fuel_tons.total_kg)
 
     return RouteFuelEstimatesResponse(
         origin=origin_code,
