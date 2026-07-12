@@ -11,31 +11,6 @@ def test_health() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_fuel_estimate_success() -> None:
-    payload = {
-        "origin": "SFO",
-        "destination": "LAX",
-        "aircraft_type": "A320",
-    }
-    response = client.post("/v1/fuel/estimate", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["origin"] == "SFO"
-    assert data["destination"] == "LAX"
-    assert data["aircraft_type"] == "A320"
-    assert data["fuel_kg"]["total_kg"] > 0
-
-
-def test_fuel_estimate_unknown_airport() -> None:
-    payload = {
-        "origin": "XXX",
-        "destination": "LAX",
-        "aircraft_type": "A320",
-    }
-    response = client.post("/v1/fuel/estimate", json=payload)
-    assert response.status_code == 404
-
-
 def test_fuel_by_route_success() -> None:
     response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
     assert response.status_code == 200
@@ -43,7 +18,7 @@ def test_fuel_by_route_success() -> None:
     assert data["origin"] == "SFO"
     assert data["destination"] == "LAX"
     assert len(data["estimates"]) >= 1
-    assert data["estimates"][0]["fuel_kg"]["total_kg"] > 0
+    assert data["estimates"][0]["fuel_tons"]["total_tons"] > 0
 
 
 def test_fuel_by_route_same_origin_destination() -> None:

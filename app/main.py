@@ -6,12 +6,12 @@ from app.models import (
     AircraftListResponse,
     AirportSearchResponse,
     FuelBreakdown,
-    FuelEstimateRequest,
-    FuelEstimateResponse,
     RouteFuelEstimateItem,
     RouteFuelEstimatesResponse,
 )
 from app.services.fuel import estimate_fuel
+
+DEFAULT_PAYLOAD_KG = 12000.0
 
 app = FastAPI(
     title="Flight Fuel Stats API",
@@ -59,61 +59,6 @@ def search_airports(q: str = Query(..., min_length=2, description="Airport code 
     return AirportSearchResponse(airports=matches)
 
 
-@app.post("/v1/fuel/estimate", response_model=FuelEstimateResponse)
-def fuel_estimate(payload: FuelEstimateRequest) -> FuelEstimateResponse:
-    origin_code = payload.origin.strip().upper()
-    destination_code = payload.destination.strip().upper()
-    aircraft_code = payload.aircraft_type.strip().upper()
-
-    if origin_code not in AIRPORTS:
-        raise HTTPException(status_code=404, detail=f"Unknown origin airport: {origin_code}")
-    if destination_code not in AIRPORTS:
-        raise HTTPException(status_code=404, detail=f"Unknown destination airport: {destination_code}")
-    if aircraft_code not in AIRCRAFT_PROFILES:
-        raise HTTPException(status_code=404, detail=f"Unsupported aircraft type: {aircraft_code}")
-    if origin_code == destination_code:
-        raise HTTPException(status_code=400, detail="Origin and destination must be different")
-
-    origin = AIRPORTS[origin_code]
-    destination = AIRPORTS[destination_code]
-    aircraft = AIRCRAFT_PROFILES[aircraft_code]
-
-    result = estimate_fuel(
-        origin=origin,
-        destination=destination,
-        aircraft=aircraft,
-        routing_factor=payload.routing_factor,
-        contingency_pct=payload.contingency_pct,
-        payload_kg=payload.payload_kg,
-    )
-
-    confidence = "medium"
-    if payload.payload_kg is not None:
-        confidence = "medium-high"
-
-    return FuelEstimateResponse(
-        origin=origin_code,
-        destination=destination_code,
-        aircraft_type=aircraft_code,
-        distance_nm=result["distance_nm"],
-        block_time_min=result["block_time_min"],
-        fuel_kg=FuelBreakdown(
-            taxi_kg=result["taxi_kg"],
-            trip_kg=result["trip_kg"],
-            contingency_kg=result["contingency_kg"],
-            reserve_kg=result["reserve_kg"],
-            total_kg=result["total_kg"],
-        ),
-        assumptions={
-            "routing_factor": payload.routing_factor,
-            "contingency_pct": payload.contingency_pct,
-            "reserve_minutes": float(aircraft["reserve_minutes"]),
-            "taxi_fuel_kg": float(aircraft["taxi_kg"]),
-        },
-        confidence=confidence,
-    )
-
-
 @app.get("/v1/fuel/by-route", response_model=RouteFuelEstimatesResponse)
 def fuel_by_route(
     origin: str = Query(..., min_length=3, max_length=4, description="IATA or ICAO origin code"),
@@ -134,6 +79,7 @@ def fuel_by_route(
 
     origin_airport = AIRPORTS[origin_code]
     destination_airport = AIRPORTS[destination_code]
+    effective_payload_kg = payload_kg if payload_kg is not None else DEFAULT_PAYLOAD_KG
 
     estimates: list[RouteFuelEstimateItem] = []
     for aircraft_code, aircraft in AIRCRAFT_PROFILES.items():
@@ -143,7 +89,7 @@ def fuel_by_route(
             aircraft=aircraft,
             routing_factor=routing_factor,
             contingency_pct=contingency_pct,
-            payload_kg=payload_kg,
+            payload_kg=effective_payload_kg,
         )
         estimates.append(
             RouteFuelEstimateItem(
@@ -151,17 +97,17 @@ def fuel_by_route(
                 aircraft_name=str(aircraft["name"]),
                 distance_nm=result["distance_nm"],
                 block_time_min=result["block_time_min"],
-                fuel_kg=FuelBreakdown(
-                    taxi_kg=result["taxi_kg"],
-                    trip_kg=result["trip_kg"],
-                    contingency_kg=result["contingency_kg"],
-                    reserve_kg=result["reserve_kg"],
-                    total_kg=result["total_kg"],
+                fuel_tons=FuelBreakdown(
+                    taxi_tons=result["taxi_tons"],
+                    trip_tons=result["trip_tons"],
+                    contingency_tons=result["contingency_tons"],
+                    reserve_tons=result["reserve_tons"],
+                    total_tons=result["total_tons"],
                 ),
             )
         )
 
-    estimates.sort(key=lambda item: item.fuel_kg.total_kg)
+    estimates.sort(key=lambda item: item.fuel_tons.total_tons)
 
     return RouteFuelEstimatesResponse(
         origin=origin_code,
@@ -169,7 +115,7 @@ def fuel_by_route(
         assumptions={
             "routing_factor": routing_factor,
             "contingency_pct": contingency_pct,
-            "payload_kg": payload_kg or 0.0,
+            "payload_kg": effective_payload_kg,
         },
         estimates=estimates,
     )

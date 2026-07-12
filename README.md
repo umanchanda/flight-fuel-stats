@@ -12,7 +12,6 @@ FastAPI service to estimate route fuel usage using:
 - GET /v1/aircraft
 - GET /v1/airports/search?q=<query>
 - GET /v1/fuel/by-route?origin=<code>&destination=<code>
-- POST /v1/fuel/estimate
 
 ### GET /v1/fuel/by-route example (no JSON body)
 
@@ -24,22 +23,12 @@ curl "http://127.0.0.1:8000/v1/fuel/by-route?origin=SFO&destination=LAX"
 
 This returns all supported aircraft and the fuel estimate for each one, sorted by total fuel (lowest first).
 
-### POST /v1/fuel/estimate example
+Use optional query params for tuning:
+- `routing_factor` (default `1.06`)
+- `contingency_pct` (default `0.05`)
+- `payload_kg` (default `12000` if omitted)
 
-Request:
-
-```json
-{
-  "origin": "SFO",
-  "destination": "LAX",
-  "aircraft_type": "A320",
-  "payload_kg": 12000,
-  "routing_factor": 1.06,
-  "contingency_pct": 0.05
-}
-```
-
-Response includes distance, block time, fuel breakdown, and assumptions.
+Response includes distance, block time, fuel breakdown (tons), and assumptions.
 
 ## Run locally
 

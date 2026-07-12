@@ -1,6 +1,10 @@
 from app.services.distance import routed_distance_nm
 
 
+def _kg_to_tons(value_kg: float) -> float:
+    return value_kg / 1000.0
+
+
 def estimate_fuel(
     origin: dict[str, float | str],
     destination: dict[str, float | str],
@@ -38,9 +42,9 @@ def estimate_fuel(
     return {
         "distance_nm": round(distance_nm, 1),
         "block_time_min": round((trip_time_hr * 60.0) + 20.0, 1),
-        "taxi_kg": round(taxi_kg, 1),
-        "trip_kg": round(trip_kg, 1),
-        "contingency_kg": round(contingency_kg, 1),
-        "reserve_kg": round(reserve_kg, 1),
-        "total_kg": round(total_kg, 1),
+        "taxi_tons": round(_kg_to_tons(taxi_kg), 3),
+        "trip_tons": round(_kg_to_tons(trip_kg), 3),
+        "contingency_tons": round(_kg_to_tons(contingency_kg), 3),
+        "reserve_tons": round(_kg_to_tons(reserve_kg), 3),
+        "total_tons": round(_kg_to_tons(total_kg), 3),
     }
