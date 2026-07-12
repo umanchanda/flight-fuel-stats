@@ -6,6 +6,8 @@ import httpx
 from app.data.aircraft import AIRCRAFT_PROFILES
 
 DEFAULT_ROUTE_ANALYZER_URL = "https://route-analyzer-nfu1.onrender.com/aircraft"
+DEFAULT_TIMEOUT_SECONDS = 20.0
+DEFAULT_RETRIES = 2
 
 # Map known external IATA/ICAO/type identifiers to local aircraft catalog codes.
 AIRCRAFT_CODE_ALIASES: dict[str, str] = {
@@ -61,6 +63,18 @@ def _normalize(value: str | None) -> str:
     return value.strip().upper()
 
 
+def _build_route_lookup_url(origin: str, destination: str) -> str:
+    base_url = os.getenv("ROUTE_ANALYZER_BASE_URL", DEFAULT_ROUTE_ANALYZER_URL).rstrip("/")
+
+    # Support both forms:
+    # - https://.../aircraft
+    # - https://...
+    if not base_url.endswith("/aircraft"):
+        base_url = f"{base_url}/aircraft"
+
+    return f"{base_url}/{origin}/{destination}"
+
+
 def _resolve_local_code(aircraft_item: dict[str, Any]) -> str | None:
     icao = _normalize(str(aircraft_item.get("icao", "")))
     iata = _normalize(str(aircraft_item.get("iata", "")))
@@ -83,16 +97,33 @@ def _resolve_local_code(aircraft_item: dict[str, Any]) -> str | None:
 
 
 def get_supported_aircraft_for_route(origin: str, destination: str) -> tuple[bool, list[str], str | None]:
-    base_url = os.getenv("ROUTE_ANALYZER_BASE_URL", DEFAULT_ROUTE_ANALYZER_URL).rstrip("/")
-    url = f"{base_url}/{origin}/{destination}"
+    url = _build_route_lookup_url(origin, destination)
+
+    response: httpx.Response | None = None
+    last_error: Exception | None = None
+    for _ in range(DEFAULT_RETRIES):
+        try:
+            response = httpx.get(url, timeout=DEFAULT_TIMEOUT_SECONDS)
+            break
+        except httpx.HTTPError as exc:
+            last_error = exc
+
+    if response is None:
+        raise RouteAircraftLookupError("Failed to fetch route aircraft data") from last_error
+
+    # Upstream may use 404 for unsupported routes.
+    if response.status_code == 404:
+        return False, [], None
+    if response.status_code >= 500:
+        raise RouteAircraftLookupError("Route analyzer service is unavailable")
+    if response.status_code >= 400:
+        raise RouteAircraftLookupError("Route analyzer rejected the request")
 
     try:
-        response = httpx.get(url, timeout=8.0)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise RouteAircraftLookupError("Failed to fetch route aircraft data") from exc
+        payload = response.json()
+    except ValueError as exc:
+        raise RouteAircraftLookupError("Invalid route analyzer response format") from exc
 
-    payload = response.json()
     route_exists = bool(payload.get("routeExists", False))
     route_notes = payload.get("routeNotes")
 
