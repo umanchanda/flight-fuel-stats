@@ -75,6 +75,17 @@ def _build_route_lookup_url(origin: str, destination: str) -> str:
     return f"{base_url}/{origin}/{destination}"
 
 
+def _safe_json(response: httpx.Response) -> dict[str, Any] | None:
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
 def _resolve_local_code(aircraft_item: dict[str, Any]) -> str | None:
     icao = _normalize(str(aircraft_item.get("icao", "")))
     iata = _normalize(str(aircraft_item.get("iata", "")))
@@ -103,7 +114,7 @@ def get_supported_aircraft_for_route(origin: str, destination: str) -> tuple[boo
     last_error: Exception | None = None
     for _ in range(DEFAULT_RETRIES):
         try:
-            response = httpx.get(url, timeout=DEFAULT_TIMEOUT_SECONDS)
+            response = httpx.get(url, timeout=DEFAULT_TIMEOUT_SECONDS, follow_redirects=True)
             break
         except httpx.HTTPError as exc:
             last_error = exc
@@ -111,26 +122,31 @@ def get_supported_aircraft_for_route(origin: str, destination: str) -> tuple[boo
     if response is None:
         raise RouteAircraftLookupError("Failed to fetch route aircraft data") from last_error
 
-    # Upstream may use 404 for unsupported routes.
-    if response.status_code == 404:
-        return False, [], None
+    payload = _safe_json(response)
+    route_notes = payload.get("routeNotes") if payload else None
+
+    # Upstream may use 4xx for unsupported routes.
+    if response.status_code in {400, 404, 422}:
+        return False, [], route_notes
+    if response.status_code == 429:
+        raise RouteAircraftLookupError("Route analyzer rate limit exceeded")
     if response.status_code >= 500:
         raise RouteAircraftLookupError("Route analyzer service is unavailable")
     if response.status_code >= 400:
         raise RouteAircraftLookupError("Route analyzer rejected the request")
 
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise RouteAircraftLookupError("Invalid route analyzer response format") from exc
+    if payload is None:
+        raise RouteAircraftLookupError("Invalid route analyzer response format")
 
-    route_exists = bool(payload.get("routeExists", False))
-    route_notes = payload.get("routeNotes")
+    route_exists = bool(payload.get("routeExists"))
+    aircraft_items = payload.get("aircraft", [])
+    if not route_exists and isinstance(aircraft_items, list) and len(aircraft_items) > 0:
+        # Some upstream deployments omit routeExists on successful matches.
+        route_exists = True
 
     if not route_exists:
         return False, [], route_notes
 
-    aircraft_items = payload.get("aircraft", [])
     if not isinstance(aircraft_items, list):
         raise RouteAircraftLookupError("Invalid route analyzer response format")
 
