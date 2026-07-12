@@ -11,7 +11,18 @@ FastAPI service to estimate route fuel usage using:
 - GET /health
 - GET /v1/aircraft
 - GET /v1/airports/search?q=<query>
+- GET /v1/fuel/by-route?origin=<code>&destination=<code>
 - POST /v1/fuel/estimate
+
+### GET /v1/fuel/by-route example (no JSON body)
+
+Request:
+
+```bash
+curl "http://127.0.0.1:8000/v1/fuel/by-route?origin=SFO&destination=LAX"
+```
+
+This returns all supported aircraft and the fuel estimate for each one, sorted by total fuel (lowest first).
 
 ### POST /v1/fuel/estimate example
 

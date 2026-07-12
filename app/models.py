@@ -29,6 +29,21 @@ class FuelEstimateResponse(BaseModel):
     confidence: str
 
 
+class RouteFuelEstimateItem(BaseModel):
+    aircraft_type: str
+    aircraft_name: str
+    distance_nm: float
+    block_time_min: float
+    fuel_kg: FuelBreakdown
+
+
+class RouteFuelEstimatesResponse(BaseModel):
+    origin: str
+    destination: str
+    assumptions: dict[str, float]
+    estimates: list[RouteFuelEstimateItem]
+
+
 class AircraftListResponse(BaseModel):
     aircraft: list[dict[str, float | str]]
 

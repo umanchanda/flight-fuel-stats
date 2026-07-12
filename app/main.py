@@ -8,6 +8,8 @@ from app.models import (
     FuelBreakdown,
     FuelEstimateRequest,
     FuelEstimateResponse,
+    RouteFuelEstimateItem,
+    RouteFuelEstimatesResponse,
 )
 from app.services.fuel import estimate_fuel
 
@@ -109,4 +111,65 @@ def fuel_estimate(payload: FuelEstimateRequest) -> FuelEstimateResponse:
             "taxi_fuel_kg": float(aircraft["taxi_kg"]),
         },
         confidence=confidence,
+    )
+
+
+@app.get("/v1/fuel/by-route", response_model=RouteFuelEstimatesResponse)
+def fuel_by_route(
+    origin: str = Query(..., min_length=3, max_length=4, description="IATA or ICAO origin code"),
+    destination: str = Query(..., min_length=3, max_length=4, description="IATA or ICAO destination code"),
+    routing_factor: float = Query(1.06, ge=1.0, le=1.2),
+    contingency_pct: float = Query(0.05, ge=0.0, le=0.2),
+    payload_kg: float | None = Query(None, ge=0.0),
+) -> RouteFuelEstimatesResponse:
+    origin_code = origin.strip().upper()
+    destination_code = destination.strip().upper()
+
+    if origin_code not in AIRPORTS:
+        raise HTTPException(status_code=404, detail=f"Unknown origin airport: {origin_code}")
+    if destination_code not in AIRPORTS:
+        raise HTTPException(status_code=404, detail=f"Unknown destination airport: {destination_code}")
+    if origin_code == destination_code:
+        raise HTTPException(status_code=400, detail="Origin and destination must be different")
+
+    origin_airport = AIRPORTS[origin_code]
+    destination_airport = AIRPORTS[destination_code]
+
+    estimates: list[RouteFuelEstimateItem] = []
+    for aircraft_code, aircraft in AIRCRAFT_PROFILES.items():
+        result = estimate_fuel(
+            origin=origin_airport,
+            destination=destination_airport,
+            aircraft=aircraft,
+            routing_factor=routing_factor,
+            contingency_pct=contingency_pct,
+            payload_kg=payload_kg,
+        )
+        estimates.append(
+            RouteFuelEstimateItem(
+                aircraft_type=aircraft_code,
+                aircraft_name=str(aircraft["name"]),
+                distance_nm=result["distance_nm"],
+                block_time_min=result["block_time_min"],
+                fuel_kg=FuelBreakdown(
+                    taxi_kg=result["taxi_kg"],
+                    trip_kg=result["trip_kg"],
+                    contingency_kg=result["contingency_kg"],
+                    reserve_kg=result["reserve_kg"],
+                    total_kg=result["total_kg"],
+                ),
+            )
+        )
+
+    estimates.sort(key=lambda item: item.fuel_kg.total_kg)
+
+    return RouteFuelEstimatesResponse(
+        origin=origin_code,
+        destination=destination_code,
+        assumptions={
+            "routing_factor": routing_factor,
+            "contingency_pct": contingency_pct,
+            "payload_kg": payload_kg or 0.0,
+        },
+        estimates=estimates,
     )
