@@ -1,0 +1,38 @@
+AIRCRAFT_PROFILES: dict[str, dict[str, float | str]] = {
+    "A320": {
+        "name": "Airbus A320",
+        "cruise_speed_kts": 450.0,
+        "burn_kg_per_hour": 2500.0,
+        "taxi_kg": 200.0,
+        "climb_descent_factor": 1.08,
+        "reserve_minutes": 30.0,
+        "payload_factor_per_1000kg": 0.01,
+    },
+    "B737": {
+        "name": "Boeing 737-800",
+        "cruise_speed_kts": 455.0,
+        "burn_kg_per_hour": 2400.0,
+        "taxi_kg": 190.0,
+        "climb_descent_factor": 1.08,
+        "reserve_minutes": 30.0,
+        "payload_factor_per_1000kg": 0.01,
+    },
+    "A350": {
+        "name": "Airbus A350-900",
+        "cruise_speed_kts": 488.0,
+        "burn_kg_per_hour": 5800.0,
+        "taxi_kg": 350.0,
+        "climb_descent_factor": 1.1,
+        "reserve_minutes": 45.0,
+        "payload_factor_per_1000kg": 0.008,
+    },
+    "B787": {
+        "name": "Boeing 787-9",
+        "cruise_speed_kts": 488.0,
+        "burn_kg_per_hour": 5600.0,
+        "taxi_kg": 340.0,
+        "climb_descent_factor": 1.1,
+        "reserve_minutes": 45.0,
+        "payload_factor_per_1000kg": 0.008,
+    },
+}
