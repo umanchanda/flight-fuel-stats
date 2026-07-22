@@ -51,3 +51,55 @@ def test_get_supported_aircraft_for_route_raises_on_429(monkeypatch: pytest.Monk
 
     with pytest.raises(RouteAircraftLookupError):
         get_supported_aircraft_for_route("SFO", "LAX")
+
+
+def test_get_supported_aircraft_for_route_retries_transient_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def mock_get(_url: str, timeout: float, follow_redirects: bool) -> httpx.Response:
+        assert timeout > 0
+        assert follow_redirects is True
+        calls["count"] += 1
+        if calls["count"] < 3:
+            return httpx.Response(503)
+        return httpx.Response(
+            200,
+            json={
+                "routeExists": True,
+                "aircraft": [{"icao": "B77W", "iata": "77W", "type": "Boeing 777-300ER"}],
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", mock_get)
+
+    route_exists, aircraft_codes, _route_notes = get_supported_aircraft_for_route("EWR", "DEL")
+
+    assert calls["count"] == 3
+    assert route_exists is True
+    assert aircraft_codes == ["B77W"]
+
+
+def test_get_supported_aircraft_for_route_retries_transport_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    def mock_get(_url: str, timeout: float, follow_redirects: bool) -> httpx.Response:
+        assert timeout > 0
+        assert follow_redirects is True
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise httpx.ConnectTimeout("upstream timed out")
+        return httpx.Response(
+            200,
+            json={
+                "routeExists": True,
+                "aircraft": [{"icao": "A320", "iata": "320", "type": "Airbus A320"}],
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", mock_get)
+
+    route_exists, aircraft_codes, _route_notes = get_supported_aircraft_for_route("SFO", "LAX")
+
+    assert calls["count"] == 2
+    assert route_exists is True
+    assert aircraft_codes == ["A320"]

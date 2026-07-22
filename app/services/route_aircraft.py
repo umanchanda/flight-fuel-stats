@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any
 
 import httpx
@@ -7,7 +8,8 @@ from app.data.aircraft import AIRCRAFT_PROFILES
 
 DEFAULT_ROUTE_ANALYZER_URL = "https://route-analyzer-nfu1.onrender.com/aircraft"
 DEFAULT_TIMEOUT_SECONDS = 20.0
-DEFAULT_RETRIES = 2
+DEFAULT_RETRIES = 3
+DEFAULT_RETRY_BACKOFF_SECONDS = 0.6
 
 # Map known external IATA/ICAO/type identifiers to local aircraft catalog codes.
 AIRCRAFT_CODE_ALIASES: dict[str, str] = {
@@ -55,6 +57,28 @@ TYPE_ALIASES: dict[str, str] = {
 
 class RouteAircraftLookupError(Exception):
     pass
+
+
+def _int_from_env(name: str, default: int, *, min_value: int = 1) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(min_value, value)
+
+
+def _float_from_env(name: str, default: float, *, min_value: float = 0.0) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return max(min_value, value)
 
 
 def _normalize(value: str | None) -> str:
@@ -109,15 +133,34 @@ def _resolve_local_code(aircraft_item: dict[str, Any]) -> str | None:
 
 def get_supported_aircraft_for_route(origin: str, destination: str) -> tuple[bool, list[str], str | None]:
     url = _build_route_lookup_url(origin, destination)
+    timeout_seconds = _float_from_env("ROUTE_ANALYZER_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS, min_value=1.0)
+    retries = _int_from_env("ROUTE_ANALYZER_RETRIES", DEFAULT_RETRIES, min_value=1)
+    retry_backoff_seconds = _float_from_env(
+        "ROUTE_ANALYZER_RETRY_BACKOFF_SECONDS",
+        DEFAULT_RETRY_BACKOFF_SECONDS,
+        min_value=0.0,
+    )
 
     response: httpx.Response | None = None
     last_error: Exception | None = None
-    for _ in range(DEFAULT_RETRIES):
+    transient_statuses = {502, 503, 504}
+
+    for attempt in range(retries):
         try:
-            response = httpx.get(url, timeout=DEFAULT_TIMEOUT_SECONDS, follow_redirects=True)
-            break
+            candidate = httpx.get(url, timeout=timeout_seconds, follow_redirects=True)
         except httpx.HTTPError as exc:
             last_error = exc
+            if attempt + 1 < retries and retry_backoff_seconds > 0:
+                time.sleep(retry_backoff_seconds * (2**attempt))
+            continue
+
+        if candidate.status_code in transient_statuses and attempt + 1 < retries:
+            if retry_backoff_seconds > 0:
+                time.sleep(retry_backoff_seconds * (2**attempt))
+            continue
+
+        response = candidate
+        break
 
     if response is None:
         raise RouteAircraftLookupError("Failed to fetch route aircraft data") from last_error
