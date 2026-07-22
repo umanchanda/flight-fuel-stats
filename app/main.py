@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, HTTPException, Query
 
 from app.data.aircraft import AIRCRAFT_PROFILES
@@ -12,10 +14,37 @@ from app.models import (
     RouteFuelEstimateItem,
     RouteFuelEstimatesResponse,
 )
+from app.services.distance import great_circle_nm
 from app.services.fuel import estimate_fuel
 from app.services.route_aircraft import RouteAircraftLookupError, get_supported_aircraft_for_route
 
 DEFAULT_PAYLOAD_KG = 12000.0
+
+
+def _fallback_enabled() -> bool:
+    raw = os.getenv("ROUTE_AIRCRAFT_FALLBACK_ENABLED", "true").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _fallback_aircraft_for_distance(distance_nm: float) -> list[str]:
+    if distance_nm <= 1200:
+        return ["A320", "B737"]
+    if distance_nm <= 3200:
+        return ["A320", "B737", "A333", "B787"]
+    if distance_nm <= 6500:
+        return ["A333", "B787", "A350", "B77W"]
+    return ["B787", "A350", "A35K", "B77W", "B772LR", "A388", "B748"]
+
+
+def _fallback_route_aircraft_codes(origin_airport: dict[str, float | str], destination_airport: dict[str, float | str]) -> list[str]:
+    distance_nm = great_circle_nm(
+        float(origin_airport["lat"]),
+        float(origin_airport["lon"]),
+        float(destination_airport["lat"]),
+        float(destination_airport["lon"]),
+    )
+    selected = [code for code in _fallback_aircraft_for_distance(distance_nm) if code in AIRCRAFT_PROFILES]
+    return selected
 
 app = FastAPI(
     title="Flight Fuel Stats API",
@@ -103,7 +132,10 @@ def fuel_by_route(
     try:
         route_exists, route_aircraft_codes, _route_notes = get_supported_aircraft_for_route(origin_code, destination_code)
     except RouteAircraftLookupError as exc:
-        raise HTTPException(status_code=502, detail="Unable to retrieve route aircraft data") from exc
+        if not _fallback_enabled():
+            raise HTTPException(status_code=502, detail="Unable to retrieve route aircraft data") from exc
+        route_exists = True
+        route_aircraft_codes = _fallback_route_aircraft_codes(origin_airport, destination_airport)
 
     if not route_exists:
         raise HTTPException(status_code=404, detail=f"No known route found for {origin_code} to {destination_code}")

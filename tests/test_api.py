@@ -112,6 +112,32 @@ def test_fuel_by_route_returns_404_when_no_route_exists() -> None:
     assert response.status_code == 404
 
 
+def test_fuel_by_route_uses_fallback_when_route_lookup_fails(monkeypatch) -> None:
+    def mock_route_lookup(_origin: str, _destination: str) -> tuple[bool, list[str], str | None]:
+        raise main_module.RouteAircraftLookupError("upstream unavailable")
+
+    monkeypatch.delenv("ROUTE_AIRCRAFT_FALLBACK_ENABLED", raising=False)
+    main_module.get_supported_aircraft_for_route = mock_route_lookup
+
+    response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["origin"] == "SFO"
+    assert data["destination"] == "LAX"
+    assert len(data["estimates"]) >= 1
+
+
+def test_fuel_by_route_returns_502_when_fallback_disabled(monkeypatch) -> None:
+    def mock_route_lookup(_origin: str, _destination: str) -> tuple[bool, list[str], str | None]:
+        raise main_module.RouteAircraftLookupError("upstream unavailable")
+
+    monkeypatch.setenv("ROUTE_AIRCRAFT_FALLBACK_ENABLED", "false")
+    main_module.get_supported_aircraft_for_route = mock_route_lookup
+
+    response = client.get("/v1/fuel/by-route?origin=SFO&destination=LAX")
+    assert response.status_code == 502
+
+
 def test_compare_fuel_success() -> None:
     response = client.get("/v1/fuel/compare?origin=SFO&destination=LAX&aircraft_a=A320&aircraft_b=B737")
     assert response.status_code == 200

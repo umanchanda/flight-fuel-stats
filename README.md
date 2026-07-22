@@ -33,6 +33,8 @@ https://route-analyzer-nfu1.onrender.com/aircraft/<ORIGIN>/<DEST>
 
 Set `ROUTE_ANALYZER_BASE_URL` to override this base URL in non-production environments.
 
+If the route-analyzer is unavailable, the API now falls back to a local distance-based aircraft shortlist instead of returning 502 by default. To keep strict behavior, set `ROUTE_AIRCRAFT_FALLBACK_ENABLED=false`.
+
 Use optional query params for tuning:
 - `routing_factor` (default `1.06`)
 - `contingency_pct` (default `0.05`)
